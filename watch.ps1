@@ -22,12 +22,12 @@ $gitActions = {
       git add $_
     }
     git commit -m "sync" --squash $global:base
-    git pull --commit --autostash --no-rebase
+    git pull --commit --autostash --no-rebase --no-edit
     git push origin
     $planned.Clear();
   }
   Write-Host "GIT ✔"
-}
+};
 Register-ObjectEvent -InputObject $timer -EventName Elapsed -SourceIdentifier GitTimer  | Out-Null
 $clearAssumed = {
   if ($null -eq $assumeUnchangedFiles ) {
@@ -70,24 +70,30 @@ $stateAskBranch = {
       return
     }
     git switch $branch
-    git pull --commit --autostash --no-rebase
+    git pull --commit --autostash --no-rebase --no-edit
     if (!$?) {
       Write-Warning "Something strange. You don't have upstream branch for current branch `"$branch`", so that can't be used."
       exit
     }
     .$initCommit
-    git push -u origin $branch
+    git push origin
   }
   else {
     git switch -c $branch
     .$initCommit
     git push -u origin $branch
+    if (!$?) {
+      # maybe already created
+      git fetch
+      git branch --set-upstream-to=origin/$branch $branch
+      git pull --commit --autostash --no-rebase --no-edit
+      git push origin
+    }
   }
 }
 .$stateAskBranch
-
 $ignored = @(
-  ".git/"
+  ".git"
 )
 function CheckNotIgnored
 {
@@ -126,7 +132,7 @@ while($true) {
   if ($host.ui.RawUI.KeyAvailable) {
     $key = $host.UI.RawUI.ReadKey();
     if ($null -ne $key -and $key.Character -eq 'q') {
-      Write-Host "`nUnregistering events handler"
+      Write-Host "`nUnregistering events handler";
       Get-EventSubscriber | Unregister-Event
       .$clearAssumed
       break;
